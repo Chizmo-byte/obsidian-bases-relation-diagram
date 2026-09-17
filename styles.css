@@ -6,3 +6,55 @@ available in the app when your plugin is enabled.
 If your plugin does not need CSS, delete this file.
 
 */
+
+.relation-diagram-view {
+	overflow: auto;
+	padding: var(--size-4-4);
+}
+
+.relation-diagram-node-box {
+	fill: var(--background-secondary);
+	stroke: var(--background-modifier-border);
+	stroke-width: 1px;
+}
+
+.relation-diagram-node {
+	cursor: grab;
+	/* タッチ操作でドラッグがスクロールに奪われないようにする */
+	touch-action: none;
+}
+
+.relation-diagram-node.is-dragging {
+	cursor: grabbing;
+}
+
+.relation-diagram-node-label {
+	fill: var(--text-normal);
+	font-family: var(--font-interface);
+	font-size: var(--font-ui-small);
+	/* ドラッグ中にラベルが選択状態にならないようにする */
+	user-select: none;
+}
+
+.relation-diagram-node-divider {
+	stroke: var(--background-modifier-border);
+	stroke-width: 1px;
+}
+
+.relation-diagram-node-property {
+	fill: var(--text-muted);
+	font-family: var(--font-interface);
+	font-size: var(--font-ui-smaller);
+	user-select: none;
+}
+
+.relation-diagram-edge {
+	stroke: var(--text-muted);
+	stroke-width: 1px;
+}
+
+/* marker の中身は参照元の線から継承しないため、色をここで指定する */
+.relation-diagram-arrow,
+.relation-diagram-source-dot {
+	fill: var(--text-muted);
+}

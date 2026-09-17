@@ -1,18 +1,37 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
-import MyPlugin from './main';
+import BasesRelationDiagramPlugin from './main';
 
-export interface MyPluginSettings {
-	mySetting: string;
+/** 手動配置されたノードの座標。 */
+export interface NodePosition {
+	x: number;
+	y: number;
 }
 
-export const DEFAULT_SETTINGS: MyPluginSettings = {
+/**
+ * ノート名 → 座標。
+ *
+ * ノート名（basename）が一意なのは 1 フォルダの中だけなので、
+ * 別フォルダの同名ノートと混ざらないようフォルダ単位で名前空間を分ける。
+ */
+export type FolderPositions = Record<string, NodePosition>;
+
+/** フォルダパス → そのフォルダ内の座標表。 */
+export type SavedPositions = Record<string, FolderPositions>;
+
+export interface BasesRelationDiagramSettings {
+	mySetting: string;
+	nodePositions: SavedPositions;
+}
+
+export const DEFAULT_SETTINGS: BasesRelationDiagramSettings = {
 	mySetting: 'default',
+	nodePositions: {},
 };
 
-export class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
+export class BasesRelationDiagramSettingTab extends PluginSettingTab {
+	plugin: BasesRelationDiagramPlugin;
 
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: BasesRelationDiagramPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
