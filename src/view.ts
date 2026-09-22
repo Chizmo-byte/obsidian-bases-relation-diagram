@@ -12,9 +12,16 @@ export const VIEW_TYPE_RELATION_DIAGRAM = 'bases-relation-diagram-view';
  */
 export class RelationDiagramView extends ItemView {
 	private svg: SVGSVGElement | null = null;
+	/** ヘッダーの再読み込みボタンから呼ぶハンドラ。描画元（main.ts）が都度差し替える。 */
+	private onRefresh: (() => void) | null = null;
 
 	constructor(leaf: WorkspaceLeaf) {
 		super(leaf);
+	}
+
+	/** ヘッダーの再読み込みボタンの挙動を登録する。 */
+	setRefreshHandler(handler: () => void) {
+		this.onRefresh = handler;
 	}
 
 	getViewType(): string {
@@ -36,6 +43,12 @@ export class RelationDiagramView extends ItemView {
 	}
 
 	protected override async onOpen(): Promise<void> {
+		// 対象フォルダの再走査＋再描画は main.ts 側の renderFolderDiagram に
+		// 任せる。ここではボタンを置いてハンドラを呼ぶだけ。metadataCache の
+		// 変更監視のような自動検知はあえて実装していない
+		this.addAction('refresh-cw', 'Refresh relation diagram', () => {
+			this.onRefresh?.();
+		});
 		this.draw();
 	}
 

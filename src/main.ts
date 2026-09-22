@@ -3,6 +3,7 @@ import {
 	Plugin,
 	TFile,
 	TFolder,
+	WorkspaceLeaf,
 	getLanguage,
 	getLinkpath,
 } from 'obsidian';
@@ -638,13 +639,6 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 			callback: async () => {
 				const activeFile = this.app.workspace.getActiveFile();
 				const folder = activeFile?.parent ?? this.app.vault.getRoot();
-				const folderPath = folder.path;
-				const notes = this.collectFolderRelations(folder);
-				// まず layoutGrid で全ノードに既定位置を与え、保存済みのものだけ上書きする
-				const nodes = applySavedPositions(
-					layoutGrid(toDiagramNodes(notes)),
-					this.settings.nodePositions[folderPath] ?? {},
-				);
 
 				const leaf = this.app.workspace.getLeaf('tab');
 				await leaf.setViewState({
@@ -652,36 +646,69 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 					active: true,
 				});
 				// setViewState の active: true でタブが前面に来るため revealLeaf は不要
+
 				if (leaf.view instanceof RelationDiagramView) {
-					leaf.view.setSvg(
-						renderDiagramSvg(
-							nodes,
-							(node) => {
-								// pointerup は同期なので、保存は投げっぱなしにして
-								// 失敗だけ利用者に伝える
-								this.saveNodePosition(folderPath, node).catch(
-									() => {
-										new Notice(
-											'Failed to save the node position.',
-										);
-									},
-								);
-							},
-							(node) => {
-								// click も同期。開けなかったときだけ知らせる
-								this.openNote(folder, node.id).catch(() => {
-									new Notice(`Failed to open "${node.id}".`);
-								});
-							},
-						),
-					);
+					// ビュー右上の再読み込みボタンから呼ばれる。対象フォルダは
+					// このコマンド実行時に決まったものに固定し、都度アクティブな
+					// ノートを見直したりはしない（呼ぶたびに描画対象が変わると
+					// 「今表示している図を更新する」という直感に反するため）
+					leaf.view.setRefreshHandler(() => {
+						this.renderFolderDiagram(folder, leaf).catch(() => {
+							new Notice('Failed to refresh the diagram.');
+						});
+					});
 				}
 
-				new Notice(`Rendered ${nodes.length} notes.`);
+				await this.renderFolderDiagram(folder, leaf);
 			},
 		});
 
 		this.addSettingTab(new BasesRelationDiagramSettingTab(this.app, this));
+	}
+
+	/**
+	 * 指定フォルダのノートを走査し直し、渡された leaf の図を再描画する。
+	 *
+	 * 「Open relation diagram」コマンドの初回描画と、ビュー右上の
+	 * 再読み込みボタンの両方から呼ばれる。ノート追加・frontmatter 変更を
+	 * 拾うのはこの再走査そのものが担っており、変更監視の仕組みは
+	 * 別途持たない（呼ばれるたびに毎回ゼロから読み直すだけ）。
+	 * 座標は保存済みのものをそのまま使う（this.settings.nodePositions）。
+	 */
+	async renderFolderDiagram(
+		folder: TFolder,
+		leaf: WorkspaceLeaf,
+	): Promise<void> {
+		const folderPath = folder.path;
+		const notes = this.collectFolderRelations(folder);
+		// まず layoutGrid で全ノードに既定位置を与え、保存済みのものだけ上書きする
+		const nodes = applySavedPositions(
+			layoutGrid(toDiagramNodes(notes)),
+			this.settings.nodePositions[folderPath] ?? {},
+		);
+
+		if (leaf.view instanceof RelationDiagramView) {
+			leaf.view.setSvg(
+				renderDiagramSvg(
+					nodes,
+					(node) => {
+						// pointerup は同期なので、保存は投げっぱなしにして
+						// 失敗だけ利用者に伝える
+						this.saveNodePosition(folderPath, node).catch(() => {
+							new Notice('Failed to save the node position.');
+						});
+					},
+					(node) => {
+						// click も同期。開けなかったときだけ知らせる
+						this.openNote(folder, node.id).catch(() => {
+							new Notice(`Failed to open "${node.id}".`);
+						});
+					},
+				),
+			);
+		}
+
+		new Notice(`Rendered ${nodes.length} notes.`);
 	}
 
 	/**
