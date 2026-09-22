@@ -476,11 +476,6 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 					layoutGrid(toDiagramNodes(notes)),
 					this.settings.nodePositions[folderPath] ?? {},
 				);
-				console.log(
-					`[relation-diagram] ${folderPath || '/'}`,
-					notes,
-					nodes,
-				);
 
 				const leaf = this.app.workspace.getLeaf('tab');
 				await leaf.setViewState({
