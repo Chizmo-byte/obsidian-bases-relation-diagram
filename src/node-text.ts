@@ -63,13 +63,8 @@ function estimateCharWidth(char: string, fontSize: number): number {
 	return fontSize * ratio;
 }
 
-/**
- * 文字列全体の見積もり幅（px）。
- *
- * 切り詰め計算以外にも、値の行の先頭に置く記号のように「この文字列が
- * 大体どれくらいの幅を取るか」を先に知りたい箇所（main.ts）から再利用する。
- */
-export function estimateTextWidth(text: string, fontSize: number): number {
+/** 文字列全体の見積もり幅（px）。 */
+function estimateTextWidth(text: string, fontSize: number): number {
 	return toChars(text).reduce(
 		(total, char) => total + estimateCharWidth(char, fontSize),
 		0,
