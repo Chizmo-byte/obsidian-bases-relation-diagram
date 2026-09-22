@@ -1,4 +1,5 @@
 import { ItemView, IconName, WorkspaceLeaf } from 'obsidian';
+import { fitNodeText } from './node-text';
 
 export const VIEW_TYPE_RELATION_DIAGRAM = 'bases-relation-diagram-view';
 
@@ -57,5 +58,8 @@ export class RelationDiagramView extends ItemView {
 		}
 
 		contentEl.appendChild(this.svg);
+		// 文字の実寸は DOM に載ってからでないと測れない。描画時の見積もりで
+		// 収まりきらなかった分を、ここで実測しながら詰め直す
+		fitNodeText(this.svg);
 	}
 }

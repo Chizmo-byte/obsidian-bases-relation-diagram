@@ -48,6 +48,37 @@ If your plugin does not need CSS, delete this file.
 	user-select: none;
 }
 
+/* プロパティは「名前」1 行 +「値」1 行の 2 行組。
+   見出しにあたる名前を薄く、中身である値をはっきり見せる */
+.relation-diagram-node-property-name {
+	fill: var(--text-faint);
+}
+
+.relation-diagram-node-property-value {
+	fill: var(--text-normal);
+}
+
+/*
+ * SVG の text は既定が fill: black / font-size: medium（16px 相当）で、
+ * 指定が届かないと「黒くて大きい文字」になる。テーマ側の広い指定に
+ * 詳細度で負けないよう親クラスを含めた 2 段の指定にし、変数が解決
+ * できない環境でも既定値へ落ちないようフォールバックを添える。
+ */
+.relation-diagram-node .relation-diagram-node-open {
+	fill: var(--text-accent, currentColor);
+	font-family: var(--font-interface);
+	/* プロパティ行と同じ大きさ。変数が無い環境でも 16px には戻さない */
+	font-size: var(--font-ui-smaller, 12px);
+	user-select: none;
+	/* 箱のドラッグ用カーソル（grab）を打ち消し、押せる行だと分かるようにする */
+	cursor: pointer;
+}
+
+.relation-diagram-node .relation-diagram-node-open:hover {
+	fill: var(--text-accent-hover, var(--text-accent, currentColor));
+	text-decoration: underline;
+}
+
 .relation-diagram-edge {
 	stroke: var(--text-muted);
 	stroke-width: 1px;
