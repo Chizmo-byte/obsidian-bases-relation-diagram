@@ -1,4 +1,11 @@
-import { Notice, Plugin, TFile, TFolder, getLinkpath } from 'obsidian';
+import {
+	Notice,
+	Plugin,
+	TFile,
+	TFolder,
+	getLanguage,
+	getLinkpath,
+} from 'obsidian';
 import {
 	DEFAULT_SETTINGS,
 	BasesRelationDiagramSettings,
@@ -6,6 +13,7 @@ import {
 	FolderPositions,
 } from './settings';
 import { RelationDiagramView, VIEW_TYPE_RELATION_DIAGRAM } from './view';
+import { setFittableText } from './node-text';
 
 /** frontmatter のプロパティ 1 件。値は表示用に文字列化済み。 */
 export interface NoteProperty {
@@ -96,19 +104,70 @@ export interface DiagramNode {
 const NODE_WIDTH = 120;
 /** ラベルを置く見出し部分の高さ。 */
 const NODE_HEADER_HEIGHT = 40;
-/** プロパティ 1 行分の高さ。 */
+/** テキスト 1 行分の高さ。 */
 const NODE_ROW_HEIGHT = 18;
-/** 箱の左右の内余白。 */
-const NODE_PADDING_X = 8;
+/**
+ * プロパティ 1 件が使う行数。
+ *
+ * 1 行目にプロパティ名、2 行目に値を置く 2 行形式。値は箱の幅に対して
+ * 長くなりがちなので、名前と分けて 1 行まるごと使わせている。
+ */
+const NODE_PROPERTY_LINES = 2;
+/** 値の行の字下げ。名前より内側に置いて、どちらが名前か一目で分かるようにする。 */
+const NODE_VALUE_INDENT = 8;
+/**
+ * 箱の左右の内余白。
+ *
+ * 角丸（rx=6）の内側に文字を収めるため、半径より大きめに取っている。
+ * `NODE_TEXT_WIDTH`（＝文字を描ける幅）もここから引くので、値を変えると
+ * 余白と表示文字数の両方が同時に追従する。
+ */
+const NODE_PADDING_X = 10;
+/**
+ * 箱の最下部に置く「ページを開く」行の文言。
+ *
+ * 表示言語ごとの訳。載っていない言語は `NODE_OPEN_LABEL_FALLBACK` に落ちる。
+ * 今のところ多言語化はこの 1 文字列だけなので、翻訳ファイルは用意せず
+ * ここに直接持たせている。
+ */
+const NODE_OPEN_LABELS: Record<string, string> = {
+	ja: 'ページを開く',
+};
+const NODE_OPEN_LABEL_FALLBACK = 'Open note';
+
+/** 現在の表示言語に合わせた「ページを開く」の文言。 */
+function nodeOpenLabel(): string {
+	// getLanguage() は ISO コードを返し、未設定なら 'en'（要 Obsidian 1.8.7）
+	return NODE_OPEN_LABELS[getLanguage()] ?? NODE_OPEN_LABEL_FALLBACK;
+}
+/**
+ * 箱の中のフォントサイズ（px）。
+ *
+ * styles.css の `.relation-diagram-node-label` /
+ * `.relation-diagram-node-property` に効く `--font-ui-small` /
+ * `--font-ui-smaller` の既定値と揃えている。CSS 変数は実行時にしか
+ * 解決できないので、文字数の逆算用にここへ写しを置く。
+ * CSS 側を変えたらここも合わせる。
+ */
+const NODE_LABEL_FONT_SIZE = 13;
+const NODE_PROPERTY_FONT_SIZE = 12;
+
+/** 箱の中で文字を描ける幅。左右の内余白を除いた分。 */
+const NODE_TEXT_WIDTH = NODE_WIDTH - NODE_PADDING_X * 2;
 
 /**
  * プロパティ数に応じたノード矩形の高さ。
  *
  * 高さが可変になったため、矩形の描画・レイアウトの行送り・線の接続位置・
  * ドラッグのクランプがすべてこの関数を経由する。
+ * 最下部の「ページを開く」行は常にあるので、行高 1 つ分を足しておく。
  */
 export function nodeHeight(node: DiagramNode): number {
-	return NODE_HEADER_HEIGHT + node.properties.length * NODE_ROW_HEIGHT;
+	return (
+		NODE_HEADER_HEIGHT +
+		node.properties.length * NODE_PROPERTY_LINES * NODE_ROW_HEIGHT +
+		NODE_ROW_HEIGHT
+	);
 }
 
 /**
@@ -207,10 +266,13 @@ const SOURCE_DOT_RADIUS = 3;
  * 色や書体は styles.css のクラス側に持たせ、テーマに追従させる。
  *
  * @param onNodeMoved ドラッグ確定時に呼ばれる。座標の永続化はここで行う
+ * @param onNodeOpen 「ページを開く」クリック時に呼ばれる。ノートを開くのは
+ *                   ワークスペース側の責務なので、ここでは呼び出しだけ行う
  */
 export function renderDiagramSvg(
 	nodes: DiagramNode[],
 	onNodeMoved?: (node: DiagramNode) => void,
+	onNodeOpen?: (node: DiagramNode) => void,
 ): SVGSVGElement {
 	const MARGIN = 40;
 	// 初期配置ぴったりの viewBox だとノードを動かす余地がないため、
@@ -404,6 +466,39 @@ export function renderDiagramSvg(
 		group.addEventListener('pointercancel', (evt) => endDrag(evt, false));
 	};
 
+	/** 箱の最下部に「ページを開く」行を足し、クリックでノートを開けるようにする。 */
+	const addOpenLink = (group: SVGGElement, node: DiagramNode) => {
+		const rowTop = nodeHeight(node) - NODE_ROW_HEIGHT;
+
+		// プロパティ一覧と操作行の区切り
+		group.createSvg('line', {
+			cls: 'relation-diagram-node-divider',
+			attr: { x1: 0, y1: rowTop, x2: NODE_WIDTH, y2: rowTop },
+		});
+
+		const open = group.createSvg('text', {
+			cls: 'relation-diagram-node-open',
+			attr: {
+				x: NODE_WIDTH / 2,
+				y: rowTop + NODE_ROW_HEIGHT / 2,
+				'text-anchor': 'middle',
+				'dominant-baseline': 'middle',
+			},
+		});
+		open.textContent = nodeOpenLabel();
+
+		// ドラッグ判定は箱全体（group）の pointerdown に乗っているので、
+		// この行では伝播を止めて掴ませない。こうすると「箱を動かす」と
+		// 「ページを開く」が同じ箱の上で衝突しない
+		open.addEventListener('pointerdown', (evt) => {
+			evt.stopPropagation();
+		});
+		open.addEventListener('click', (evt) => {
+			evt.stopPropagation();
+			onNodeOpen?.(node);
+		});
+	};
+
 	for (const node of nodes) {
 		// ノード 1 つ = rect + text。位置は <g> の transform 側に持たせ、
 		// 中身はローカル座標で描く。こうするとドラッグ時の更新が transform 1 つで済む
@@ -436,8 +531,14 @@ export function renderDiagramSvg(
 				'dominant-baseline': 'middle',
 			},
 		});
-		// ラベルはユーザーのファイル名。マークアップとして解釈させない
-		label.textContent = node.label;
+		// ラベルはユーザーのファイル名。長ければ切り詰められ、
+		// 全文は <title> のツールチップで読める
+		setFittableText(
+			label,
+			node.label,
+			NODE_TEXT_WIDTH,
+			NODE_LABEL_FONT_SIZE,
+		);
 
 		if (node.properties.length > 0) {
 			// 見出しとプロパティ一覧の区切り
@@ -453,23 +554,59 @@ export function renderDiagramSvg(
 		}
 
 		node.properties.forEach((property, index) => {
-			const row = group.createSvg('text', {
-				cls: 'relation-diagram-node-property',
+			// このプロパティに割り当てられた 2 行分の上端
+			const blockTop =
+				NODE_HEADER_HEIGHT +
+				index * NODE_PROPERTY_LINES * NODE_ROW_HEIGHT;
+			/** 行の上端 + 行高の半分で、行の縦中央に置く。 */
+			const rowCenter = (line: number) =>
+				blockTop + line * NODE_ROW_HEIGHT + NODE_ROW_HEIGHT / 2;
+
+			// 1 行目: プロパティ名
+			const name = group.createSvg('text', {
+				// cls は classList へ渡されるので、複数クラスは配列で渡す
+				// （空白区切りの 1 文字列は DOMTokenList が受け付けない）
+				cls: [
+					'relation-diagram-node-property',
+					'relation-diagram-node-property-name',
+				],
 				attr: {
 					x: NODE_PADDING_X,
-					// 行の上端 + 行高の半分で、行の縦中央に置く
-					y:
-						NODE_HEADER_HEIGHT +
-						index * NODE_ROW_HEIGHT +
-						NODE_ROW_HEIGHT / 2,
+					y: rowCenter(0),
 					'dominant-baseline': 'middle',
 				},
 			});
-			// 値もユーザー由来。マークアップとして解釈させない
-			row.textContent = `${property.name}: ${property.value}`;
+			setFittableText(
+				name,
+				property.name,
+				NODE_TEXT_WIDTH,
+				NODE_PROPERTY_FONT_SIZE,
+			);
+
+			// 2 行目: 値。字下げした分だけ使える幅が狭くなる
+			const value = group.createSvg('text', {
+				// cls は classList へ渡されるので、複数クラスは配列で渡す
+				// （空白区切りの 1 文字列は DOMTokenList が受け付けない）
+				cls: [
+					'relation-diagram-node-property',
+					'relation-diagram-node-property-value',
+				],
+				attr: {
+					x: NODE_PADDING_X + NODE_VALUE_INDENT,
+					y: rowCenter(1),
+					'dominant-baseline': 'middle',
+				},
+			});
+			setFittableText(
+				value,
+				property.value,
+				NODE_TEXT_WIDTH - NODE_VALUE_INDENT,
+				NODE_PROPERTY_FONT_SIZE,
+			);
 		});
 
 		makeDraggable(group, node);
+		addOpenLink(group, node);
 	}
 
 	return svg;
@@ -489,7 +626,7 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 		// TODO: 動作確認用の一時コマンド。UI を実装する際に削除する。
 		this.addCommand({
 			id: 'open-relation-diagram',
-			name: 'Open relation diagram (debug)',
+			name: 'Open relation diagram',
 			callback: async () => {
 				const activeFile = this.app.workspace.getActiveFile();
 				const folder = activeFile?.parent ?? this.app.vault.getRoot();
@@ -509,17 +646,26 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 				// setViewState の active: true でタブが前面に来るため revealLeaf は不要
 				if (leaf.view instanceof RelationDiagramView) {
 					leaf.view.setSvg(
-						renderDiagramSvg(nodes, (node) => {
-							// pointerup は同期なので、保存は投げっぱなしにして
-							// 失敗だけ利用者に伝える
-							this.saveNodePosition(folderPath, node).catch(
-								() => {
-									new Notice(
-										'Failed to save the node position.',
-									);
-								},
-							);
-						}),
+						renderDiagramSvg(
+							nodes,
+							(node) => {
+								// pointerup は同期なので、保存は投げっぱなしにして
+								// 失敗だけ利用者に伝える
+								this.saveNodePosition(folderPath, node).catch(
+									() => {
+										new Notice(
+											'Failed to save the node position.',
+										);
+									},
+								);
+							},
+							(node) => {
+								// click も同期。開けなかったときだけ知らせる
+								this.openNote(folder, node.id).catch(() => {
+									new Notice(`Failed to open "${node.id}".`);
+								});
+							},
+						),
 					);
 				}
 
@@ -528,6 +674,29 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 		});
 
 		this.addSettingTab(new BasesRelationDiagramSettingTab(this.app, this));
+	}
+
+	/**
+	 * ノード id（拡張子なしのファイル名）に対応するノートを開く。
+	 *
+	 * ノードは走査対象フォルダ直下のノートから作られるので、同じフォルダの
+	 * 子から探せば同名ノートの取り違えが起きない。
+	 *
+	 * 図のタブを潰さないよう、開き先は新しいタブにする。
+	 */
+	async openNote(folder: TFolder, id: string): Promise<void> {
+		const file = folder.children.find(
+			(child): child is TFile =>
+				child instanceof TFile &&
+				child.extension === 'md' &&
+				child.basename === id,
+		);
+		// 図を描いた後にノートが消された場合など
+		if (!file) {
+			new Notice(`"${id}" no longer exists.`);
+			return;
+		}
+		await this.app.workspace.getLeaf('tab').openFile(file);
 	}
 
 	/**
