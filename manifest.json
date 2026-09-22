@@ -2,7 +2,7 @@
 	"id": "bases-relation-diagram",
 	"name": "Base Diagram",
 	"version": "1.0.0",
-	"minAppVersion": "1.0.0",
+	"minAppVersion": "1.8.7",
 	"description": "Extends the Bases Relation and Lookup properties into a visual diagram view, laying out notes as table-style nodes connected by relationship lines.",
 	"author": "Chizmo",
 	"authorUrl": "https://github.com/Chizmo-byte",
