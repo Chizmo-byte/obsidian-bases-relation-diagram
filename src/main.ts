@@ -21,6 +21,18 @@ export interface NoteProperty {
 	value: string;
 }
 
+/** 箱の背景色として選べるキーワード。 */
+const NODE_COLORS = ['red', 'blue', 'green', 'yellow', 'purple'] as const;
+export type NodeColor = (typeof NODE_COLORS)[number];
+
+/** 値が NODE_COLORS のいずれかに一致するかを調べる型ガード。 */
+function isNodeColor(value: unknown): value is NodeColor {
+	return (
+		typeof value === 'string' &&
+		(NODE_COLORS as readonly string[]).includes(value)
+	);
+}
+
 /** 1 ノート分の Relation 抽出結果。 */
 export interface NoteRelations {
 	/** ノートのファイル名（拡張子なし）。 */
@@ -29,6 +41,8 @@ export interface NoteRelations {
 	relations: string[];
 	/** Relation 以外の frontmatter プロパティ。 */
 	properties: NoteProperty[];
+	/** 箱の背景色。未指定または既定 5 色以外の値なら undefined（既定色のまま）。 */
+	color?: NodeColor;
 }
 
 /**
@@ -37,12 +51,15 @@ export interface NoteRelations {
  * tags / cssclasses / aliases は Obsidian が特別扱いするメタ情報で、
  * ノート同士の関係を読み解く上では雑音になる。position は Obsidian が
  * キャッシュに載せる内部情報で、ユーザーが書いたプロパティではない。
+ * color は箱の背景色を決める専用プロパティとして別枠で扱うため、
+ * 他のプロパティと並べては表示しない。
  */
 const HIDDEN_PROPERTIES = new Set([
 	'tags',
 	'cssclasses',
 	'aliases',
 	'position',
+	'color',
 ]);
 
 /** frontmatter の値を 1 行で表示できる文字列にする。 */
@@ -79,6 +96,8 @@ export interface DiagramNode {
 	relations: string[];
 	/** 箱の中に表示する frontmatter プロパティ。箱の高さもこの件数で決まる。 */
 	properties: NoteProperty[];
+	/** 箱の背景色。未指定なら既定色のまま描画する。 */
+	color?: NodeColor;
 }
 
 /** ノード矩形の寸法。レイアウトと描画の両方が参照する。 */
@@ -166,6 +185,7 @@ export function toDiagramNodes(notes: NoteRelations[]): DiagramNode[] {
 		// 元データと配列インスタンスを共有しないようコピーする
 		relations: [...note.relations],
 		properties: [...note.properties],
+		color: note.color,
 	}));
 }
 
@@ -483,12 +503,22 @@ export function renderDiagramSvg(
 		// ノード 1 つ = rect + text。位置は <g> の transform 側に持たせ、
 		// 中身はローカル座標で描く。こうするとドラッグ時の更新が transform 1 つで済む
 		const group = nodeLayer.createSvg('g', {
-			cls: 'relation-diagram-node',
+			// color が未指定、または既定 5 色以外の値なら isNodeColor で弾かれて
+			// undefined になっている。box だけでなくここにも付けておくと、
+			// プロパティ名の文字色など、色付きノードに限った CSS の出し分けが
+			// 子要素側（box とは別要素）からでも書ける
+			cls: node.color
+				? ['relation-diagram-node', `is-color-${node.color}`]
+				: 'relation-diagram-node',
 			attr: { transform: `translate(${node.x}, ${node.y})` },
 		});
 
 		group.createSvg('rect', {
-			cls: 'relation-diagram-node-box',
+			// color が未指定、または既定 5 色以外の値なら isNodeColor で弾かれて
+			// undefined になっている。その場合は修飾クラスを付けず既定色のまま
+			cls: node.color
+				? ['relation-diagram-node-box', `is-color-${node.color}`]
+				: 'relation-diagram-node-box',
 			attr: {
 				x: 0,
 				y: 0,
@@ -538,7 +568,9 @@ export function renderDiagramSvg(
 			const rowCenter = (line: number) =>
 				blockTop + line * NODE_ROW_HEIGHT + NODE_ROW_HEIGHT / 2;
 
-			// 1 行目: プロパティ名
+			// 1 行目: プロパティ名。末尾の ":" は値と区別するための表示上の飾りで、
+			// フロントマターのキー名そのものには含まれない。切り詰め幅の計算に
+			// この 1 文字分も含めたいので、setFittableText には付けた状態で渡す
 			const name = group.createSvg('text', {
 				// cls は classList へ渡されるので、複数クラスは配列で渡す
 				// （空白区切りの 1 文字列は DOMTokenList が受け付けない）
@@ -554,7 +586,7 @@ export function renderDiagramSvg(
 			});
 			setFittableText(
 				name,
-				property.name,
+				`${property.name}:`,
 				NODE_TEXT_WIDTH,
 				NODE_PROPERTY_FONT_SIZE,
 			);
@@ -730,7 +762,10 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 				});
 			}
 
-			results.push({ id: child.basename, relations, properties });
+			const rawColor: unknown = cache?.frontmatter?.color;
+			const color = isNodeColor(rawColor) ? rawColor : undefined;
+
+			results.push({ id: child.basename, relations, properties, color });
 		}
 
 		return results;
