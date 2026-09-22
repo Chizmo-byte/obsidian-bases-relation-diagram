@@ -503,7 +503,13 @@ export function renderDiagramSvg(
 		// ノード 1 つ = rect + text。位置は <g> の transform 側に持たせ、
 		// 中身はローカル座標で描く。こうするとドラッグ時の更新が transform 1 つで済む
 		const group = nodeLayer.createSvg('g', {
-			cls: 'relation-diagram-node',
+			// color が未指定、または既定 5 色以外の値なら isNodeColor で弾かれて
+			// undefined になっている。box だけでなくここにも付けておくと、
+			// プロパティ名の文字色など、色付きノードに限った CSS の出し分けが
+			// 子要素側（box とは別要素）からでも書ける
+			cls: node.color
+				? ['relation-diagram-node', `is-color-${node.color}`]
+				: 'relation-diagram-node',
 			attr: { transform: `translate(${node.x}, ${node.y})` },
 		});
 

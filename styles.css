@@ -96,6 +96,20 @@ If your plugin does not need CSS, delete this file.
 	fill: var(--text-faint);
 }
 
+/*
+ * color 指定済みノードでは彩度の高い背景に対して --text-faint の
+ * コントラストが不足し、色弱の方を含め読みにくいという指摘があったため、
+ * 色付きノードに限り名前も値と同じ --text-normal まで濃くする。
+ * 個々の色ごとの微調整はしない（5 色分の組み合わせが増え続けるため）。
+ */
+.relation-diagram-node.is-color-red .relation-diagram-node-property-name,
+.relation-diagram-node.is-color-blue .relation-diagram-node-property-name,
+.relation-diagram-node.is-color-green .relation-diagram-node-property-name,
+.relation-diagram-node.is-color-yellow .relation-diagram-node-property-name,
+.relation-diagram-node.is-color-purple .relation-diagram-node-property-name {
+	fill: var(--text-normal);
+}
+
 .relation-diagram-node-property-value {
 	fill: var(--text-normal);
 }
