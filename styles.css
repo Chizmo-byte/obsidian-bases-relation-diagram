@@ -18,6 +18,48 @@ If your plugin does not need CSS, delete this file.
 	stroke-width: 1px;
 }
 
+/*
+ * frontmatter の color プロパティで選べる背景色。ライト/ダーク共通のクラス名に
+ * CSS 変数を割り当て、実際の色は :root と .theme-dark とで出し分ける。
+ * どちらも --text-normal / --text-muted の文字色に対して読みやすいコントラストに
+ * なるよう、ライトは薄いトーン、ダークは沈んだトーンにしてある。
+ */
+:root {
+	--relation-diagram-color-red: #f8d7da;
+	--relation-diagram-color-blue: #dbe9fe;
+	--relation-diagram-color-green: #dcf5e3;
+	--relation-diagram-color-yellow: #fdf3d0;
+	--relation-diagram-color-purple: #ede3fb;
+}
+
+.theme-dark {
+	--relation-diagram-color-red: #4a2226;
+	--relation-diagram-color-blue: #1f3554;
+	--relation-diagram-color-green: #1f3f2a;
+	--relation-diagram-color-yellow: #4a3c14;
+	--relation-diagram-color-purple: #33234a;
+}
+
+.relation-diagram-node-box.is-color-red {
+	fill: var(--relation-diagram-color-red);
+}
+
+.relation-diagram-node-box.is-color-blue {
+	fill: var(--relation-diagram-color-blue);
+}
+
+.relation-diagram-node-box.is-color-green {
+	fill: var(--relation-diagram-color-green);
+}
+
+.relation-diagram-node-box.is-color-yellow {
+	fill: var(--relation-diagram-color-yellow);
+}
+
+.relation-diagram-node-box.is-color-purple {
+	fill: var(--relation-diagram-color-purple);
+}
+
 .relation-diagram-node {
 	cursor: grab;
 	/* タッチ操作でドラッグがスクロールに奪われないようにする */

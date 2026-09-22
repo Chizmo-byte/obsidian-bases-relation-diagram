@@ -13,6 +13,18 @@ export interface NoteProperty {
 	value: string;
 }
 
+/** 箱の背景色として選べるキーワード。 */
+const NODE_COLORS = ['red', 'blue', 'green', 'yellow', 'purple'] as const;
+export type NodeColor = (typeof NODE_COLORS)[number];
+
+/** 値が NODE_COLORS のいずれかに一致するかを調べる型ガード。 */
+function isNodeColor(value: unknown): value is NodeColor {
+	return (
+		typeof value === 'string' &&
+		(NODE_COLORS as readonly string[]).includes(value)
+	);
+}
+
 /** 1 ノート分の Relation 抽出結果。 */
 export interface NoteRelations {
 	/** ノートのファイル名（拡張子なし）。 */
@@ -21,6 +33,8 @@ export interface NoteRelations {
 	relations: string[];
 	/** Relation 以外の frontmatter プロパティ。 */
 	properties: NoteProperty[];
+	/** 箱の背景色。未指定または既定 5 色以外の値なら undefined（既定色のまま）。 */
+	color?: NodeColor;
 }
 
 /**
@@ -29,12 +43,15 @@ export interface NoteRelations {
  * tags / cssclasses / aliases は Obsidian が特別扱いするメタ情報で、
  * ノート同士の関係を読み解く上では雑音になる。position は Obsidian が
  * キャッシュに載せる内部情報で、ユーザーが書いたプロパティではない。
+ * color は箱の背景色を決める専用プロパティとして別枠で扱うため、
+ * 他のプロパティと並べては表示しない。
  */
 const HIDDEN_PROPERTIES = new Set([
 	'tags',
 	'cssclasses',
 	'aliases',
 	'position',
+	'color',
 ]);
 
 /** frontmatter の値を 1 行で表示できる文字列にする。 */
@@ -71,6 +88,8 @@ export interface DiagramNode {
 	relations: string[];
 	/** 箱の中に表示する frontmatter プロパティ。箱の高さもこの件数で決まる。 */
 	properties: NoteProperty[];
+	/** 箱の背景色。未指定なら既定色のまま描画する。 */
+	color?: NodeColor;
 }
 
 /** ノード矩形の寸法。レイアウトと描画の両方が参照する。 */
@@ -107,6 +126,7 @@ export function toDiagramNodes(notes: NoteRelations[]): DiagramNode[] {
 		// 元データと配列インスタンスを共有しないようコピーする
 		relations: [...note.relations],
 		properties: [...note.properties],
+		color: note.color,
 	}));
 }
 
@@ -393,7 +413,11 @@ export function renderDiagramSvg(
 		});
 
 		group.createSvg('rect', {
-			cls: 'relation-diagram-node-box',
+			// color が未指定、または既定 5 色以外の値なら isNodeColor で弾かれて
+			// undefined になっている。その場合は修飾クラスを付けず既定色のまま
+			cls: node.color
+				? ['relation-diagram-node-box', `is-color-${node.color}`]
+				: 'relation-diagram-node-box',
 			attr: {
 				x: 0,
 				y: 0,
@@ -566,7 +590,10 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 				});
 			}
 
-			results.push({ id: child.basename, relations, properties });
+			const rawColor: unknown = cache?.frontmatter?.color;
+			const color = isNodeColor(rawColor) ? rawColor : undefined;
+
+			results.push({ id: child.basename, relations, properties, color });
 		}
 
 		return results;
