@@ -23,6 +23,13 @@ If your plugin does not need CSS, delete this file.
  * CSS 変数を割り当て、実際の色は :root と .theme-dark とで出し分ける。
  * どちらも --text-normal / --text-muted の文字色に対して読みやすいコントラストに
  * なるよう、ライトは薄いトーン、ダークは沈んだトーンにしてある。
+ *
+ * --relation-diagram-property-name-color は、color 指定ノードに限って使う
+ * プロパティ名専用の控えめな文字色。--text-normal（値と同色）だと名前/値の
+ * 区別がつかないという指摘を受けて追加した。--text-faint ほど薄くはせず、
+ * 5 色いずれの背景に対しても WCAG コントラスト比 4.5:1 以上を保てる範囲で、
+ * 値より一段控えめな中間色を固定値で持たせている。テーマの --text-muted を
+ * 流用しないのは、ユーザーのカスタムテーマ次第で 4.5:1 を割り込みうるため。
  */
 :root {
 	--relation-diagram-color-red: #f8d7da;
@@ -30,6 +37,7 @@ If your plugin does not need CSS, delete this file.
 	--relation-diagram-color-green: #dcf5e3;
 	--relation-diagram-color-yellow: #fdf3d0;
 	--relation-diagram-color-purple: #ede3fb;
+	--relation-diagram-property-name-color: #5a5a5a;
 }
 
 .theme-dark {
@@ -38,6 +46,7 @@ If your plugin does not need CSS, delete this file.
 	--relation-diagram-color-green: #1f3f2a;
 	--relation-diagram-color-yellow: #4a3c14;
 	--relation-diagram-color-purple: #33234a;
+	--relation-diagram-property-name-color: #b4b4b4;
 }
 
 .relation-diagram-node-box.is-color-red {
@@ -99,7 +108,9 @@ If your plugin does not need CSS, delete this file.
 /*
  * color 指定済みノードでは彩度の高い背景に対して --text-faint の
  * コントラストが不足し、色弱の方を含め読みにくいという指摘があったため、
- * 色付きノードに限り名前も値と同じ --text-normal まで濃くする。
+ * 色付きノードに限り --relation-diagram-property-name-color まで濃くする。
+ * 値と同じ --text-normal にはしない。名前/値が同色だと区別がつかない
+ * という別の指摘を受けたため、値より一段控えめな専用色にしてある。
  * 個々の色ごとの微調整はしない（5 色分の組み合わせが増え続けるため）。
  */
 .relation-diagram-node.is-color-red .relation-diagram-node-property-name,
@@ -107,7 +118,7 @@ If your plugin does not need CSS, delete this file.
 .relation-diagram-node.is-color-green .relation-diagram-node-property-name,
 .relation-diagram-node.is-color-yellow .relation-diagram-node-property-name,
 .relation-diagram-node.is-color-purple .relation-diagram-node-property-name {
-	fill: var(--text-normal);
+	fill: var(--relation-diagram-property-name-color);
 }
 
 .relation-diagram-node-property-value {
