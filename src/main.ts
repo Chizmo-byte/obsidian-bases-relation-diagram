@@ -13,7 +13,7 @@ import {
 	FolderPositions,
 } from './settings';
 import { RelationDiagramView, VIEW_TYPE_RELATION_DIAGRAM } from './view';
-import { setFittableText } from './node-text';
+import { estimateTextWidth, setFittableText } from './node-text';
 
 /** frontmatter のプロパティ 1 件。値は表示用に文字列化済み。 */
 export interface NoteProperty {
@@ -154,6 +154,26 @@ const NODE_PROPERTY_FONT_SIZE = 12;
 
 /** 箱の中で文字を描ける幅。左右の内余白を除いた分。 */
 const NODE_TEXT_WIDTH = NODE_WIDTH - NODE_PADDING_X * 2;
+
+/**
+ * 値の行の先頭に置く記号。
+ *
+ * 名前の行には付けない。色の濃淡だけに頼らなくても「これは値」と
+ * 分かるようにするための目印。
+ */
+const NODE_VALUE_MARKER = '▶';
+/** 記号と値本文の間隔（px）。 */
+const NODE_VALUE_MARKER_GAP = 4;
+/**
+ * 記号の見積もり幅（px）。
+ *
+ * node-text.ts の見積もり関数をそのまま使う。値の実測切り詰めに渡す
+ * 上限幅も、この分だけ差し引いておかないと記号の分だけ箱からはみ出しうる。
+ */
+const NODE_VALUE_MARKER_WIDTH = estimateTextWidth(
+	NODE_VALUE_MARKER,
+	NODE_PROPERTY_FONT_SIZE,
+);
 
 /**
  * プロパティ数に応じたノード矩形の高さ。
@@ -589,7 +609,23 @@ export function renderDiagramSvg(
 				NODE_PROPERTY_FONT_SIZE,
 			);
 
-			// 2 行目: 値。字下げした分だけ使える幅が狭くなる
+			// 2 行目: 値。名前の行と区別するため、先頭に記号を置く
+			const marker = group.createSvg('text', {
+				cls: [
+					'relation-diagram-node-property',
+					'relation-diagram-node-property-marker',
+				],
+				attr: {
+					x: NODE_PADDING_X + NODE_VALUE_INDENT,
+					y: rowCenter(1),
+					'dominant-baseline': 'middle',
+				},
+			});
+			// 記号は切り詰め対象ではないので setFittableText は使わない
+			marker.textContent = NODE_VALUE_MARKER;
+
+			// 値本文。字下げ + 記号 + 記号との間隔の分だけ、開始位置が右へずれ、
+			// 使える幅もその分だけ狭くなる
 			const value = group.createSvg('text', {
 				// cls は classList へ渡されるので、複数クラスは配列で渡す
 				// （空白区切りの 1 文字列は DOMTokenList が受け付けない）
@@ -598,7 +634,11 @@ export function renderDiagramSvg(
 					'relation-diagram-node-property-value',
 				],
 				attr: {
-					x: NODE_PADDING_X + NODE_VALUE_INDENT,
+					x:
+						NODE_PADDING_X +
+						NODE_VALUE_INDENT +
+						NODE_VALUE_MARKER_WIDTH +
+						NODE_VALUE_MARKER_GAP,
 					y: rowCenter(1),
 					'dominant-baseline': 'middle',
 				},
@@ -606,7 +646,10 @@ export function renderDiagramSvg(
 			setFittableText(
 				value,
 				property.value,
-				NODE_TEXT_WIDTH - NODE_VALUE_INDENT,
+				NODE_TEXT_WIDTH -
+					NODE_VALUE_INDENT -
+					NODE_VALUE_MARKER_WIDTH -
+					NODE_VALUE_MARKER_GAP,
 				NODE_PROPERTY_FONT_SIZE,
 			);
 		});

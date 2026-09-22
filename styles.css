@@ -114,6 +114,12 @@ If your plugin does not need CSS, delete this file.
 	fill: var(--text-normal);
 }
 
+/* 値の行の先頭に置く記号。色の濃淡ではなく形で名前/値を区別できるよう、
+   値の文字色（--text-normal）に揃える。color 指定の有無に関わらず同じ */
+.relation-diagram-node-property-marker {
+	fill: var(--text-normal);
+}
+
 /*
  * SVG の text は既定が fill: black / font-size: medium（16px 相当）で、
  * 指定が届かないと「黒くて大きい文字」になる。テーマ側の広い指定に
