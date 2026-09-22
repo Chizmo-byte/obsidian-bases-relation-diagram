@@ -627,10 +627,16 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		this.registerView(
-			VIEW_TYPE_RELATION_DIAGRAM,
-			(leaf) => new RelationDiagramView(leaf),
-		);
+		this.registerView(VIEW_TYPE_RELATION_DIAGRAM, (leaf) => {
+			// leaf はここでしか受け取れないので、再読み込みボタン用のコール
+			// バックにクロージャで持たせる。フォルダパスは呼び出し時（コマンド
+			// 実行時 or ワークスペース復元時）にビュー自身が state から復元する
+			return new RelationDiagramView(leaf, (folderPath) => {
+				this.renderFolderDiagramByPath(folderPath, leaf).catch(() => {
+					new Notice('Failed to refresh the diagram.');
+				});
+			});
+		});
 
 		// TODO: 動作確認用の一時コマンド。UI を実装する際に削除する。
 		this.addCommand({
@@ -644,20 +650,11 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 				await leaf.setViewState({
 					type: VIEW_TYPE_RELATION_DIAGRAM,
 					active: true,
+					// ビューの setState() に渡り、ワークスペースの状態として
+					// 保存される。再起動後もこのフォルダパスで再読み込みできる
+					state: { folderPath: folder.path },
 				});
 				// setViewState の active: true でタブが前面に来るため revealLeaf は不要
-
-				if (leaf.view instanceof RelationDiagramView) {
-					// ビュー右上の再読み込みボタンから呼ばれる。対象フォルダは
-					// このコマンド実行時に決まったものに固定し、都度アクティブな
-					// ノートを見直したりはしない（呼ぶたびに描画対象が変わると
-					// 「今表示している図を更新する」という直感に反するため）
-					leaf.view.setRefreshHandler(() => {
-						this.renderFolderDiagram(folder, leaf).catch(() => {
-							new Notice('Failed to refresh the diagram.');
-						});
-					});
-				}
 
 				await this.renderFolderDiagram(folder, leaf);
 			},
@@ -709,6 +706,31 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 		}
 
 		new Notice(`Rendered ${nodes.length} notes.`);
+	}
+
+	/**
+	 * フォルダパス（文字列）から renderFolderDiagram を呼ぶ。
+	 *
+	 * ビュー右上の再読み込みボタンは、ワークスペースの状態として保存された
+	 * パス文字列しか持っていない（TFolder はシリアライズできないため）。
+	 * ここでパスから TFolder を解決してから本処理に渡す。
+	 */
+	async renderFolderDiagramByPath(
+		folderPath: string,
+		leaf: WorkspaceLeaf,
+	): Promise<void> {
+		// vault 直下（ボールト全体）が対象の場合、getAbstractFileByPath に
+		// そのパスを渡しても解決できるとは限らないため、ルートは直接扱う
+		const root = this.app.vault.getRoot();
+		const folder =
+			folderPath === root.path
+				? root
+				: this.app.vault.getAbstractFileByPath(folderPath);
+		if (!(folder instanceof TFolder)) {
+			new Notice(`Folder "${folderPath}" no longer exists.`);
+			return;
+		}
+		await this.renderFolderDiagram(folder, leaf);
 	}
 
 	/**
