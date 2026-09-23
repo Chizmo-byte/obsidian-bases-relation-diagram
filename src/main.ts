@@ -3,6 +3,7 @@ import {
 	Plugin,
 	TFile,
 	TFolder,
+	WorkspaceLeaf,
 	getLanguage,
 	getLinkpath,
 } from 'obsidian';
@@ -626,10 +627,16 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		this.registerView(
-			VIEW_TYPE_RELATION_DIAGRAM,
-			(leaf) => new RelationDiagramView(leaf),
-		);
+		this.registerView(VIEW_TYPE_RELATION_DIAGRAM, (leaf) => {
+			// leaf はここでしか受け取れないので、再読み込みボタン用のコール
+			// バックにクロージャで持たせる。フォルダパスは呼び出し時（コマンド
+			// 実行時 or ワークスペース復元時）にビュー自身が state から復元する
+			return new RelationDiagramView(leaf, (folderPath) => {
+				this.renderFolderDiagramByPath(folderPath, leaf).catch(() => {
+					new Notice('Failed to refresh the diagram.');
+				});
+			});
+		});
 
 		// TODO: 動作確認用の一時コマンド。UI を実装する際に削除する。
 		this.addCommand({
@@ -638,50 +645,92 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 			callback: async () => {
 				const activeFile = this.app.workspace.getActiveFile();
 				const folder = activeFile?.parent ?? this.app.vault.getRoot();
-				const folderPath = folder.path;
-				const notes = this.collectFolderRelations(folder);
-				// まず layoutGrid で全ノードに既定位置を与え、保存済みのものだけ上書きする
-				const nodes = applySavedPositions(
-					layoutGrid(toDiagramNodes(notes)),
-					this.settings.nodePositions[folderPath] ?? {},
-				);
 
 				const leaf = this.app.workspace.getLeaf('tab');
 				await leaf.setViewState({
 					type: VIEW_TYPE_RELATION_DIAGRAM,
 					active: true,
+					// ビューの setState() に渡り、ワークスペースの状態として
+					// 保存される。再起動後もこのフォルダパスで再読み込みできる
+					state: { folderPath: folder.path },
 				});
 				// setViewState の active: true でタブが前面に来るため revealLeaf は不要
-				if (leaf.view instanceof RelationDiagramView) {
-					leaf.view.setSvg(
-						renderDiagramSvg(
-							nodes,
-							(node) => {
-								// pointerup は同期なので、保存は投げっぱなしにして
-								// 失敗だけ利用者に伝える
-								this.saveNodePosition(folderPath, node).catch(
-									() => {
-										new Notice(
-											'Failed to save the node position.',
-										);
-									},
-								);
-							},
-							(node) => {
-								// click も同期。開けなかったときだけ知らせる
-								this.openNote(folder, node.id).catch(() => {
-									new Notice(`Failed to open "${node.id}".`);
-								});
-							},
-						),
-					);
-				}
 
-				new Notice(`Rendered ${nodes.length} notes.`);
+				await this.renderFolderDiagram(folder, leaf);
 			},
 		});
 
 		this.addSettingTab(new BasesRelationDiagramSettingTab(this.app, this));
+	}
+
+	/**
+	 * 指定フォルダのノートを走査し直し、渡された leaf の図を再描画する。
+	 *
+	 * 「Open relation diagram」コマンドの初回描画と、ビュー右上の
+	 * 再読み込みボタンの両方から呼ばれる。ノート追加・frontmatter 変更を
+	 * 拾うのはこの再走査そのものが担っており、変更監視の仕組みは
+	 * 別途持たない（呼ばれるたびに毎回ゼロから読み直すだけ）。
+	 * 座標は保存済みのものをそのまま使う（this.settings.nodePositions）。
+	 */
+	async renderFolderDiagram(
+		folder: TFolder,
+		leaf: WorkspaceLeaf,
+	): Promise<void> {
+		const folderPath = folder.path;
+		const notes = this.collectFolderRelations(folder);
+		// まず layoutGrid で全ノードに既定位置を与え、保存済みのものだけ上書きする
+		const nodes = applySavedPositions(
+			layoutGrid(toDiagramNodes(notes)),
+			this.settings.nodePositions[folderPath] ?? {},
+		);
+
+		if (leaf.view instanceof RelationDiagramView) {
+			leaf.view.setSvg(
+				renderDiagramSvg(
+					nodes,
+					(node) => {
+						// pointerup は同期なので、保存は投げっぱなしにして
+						// 失敗だけ利用者に伝える
+						this.saveNodePosition(folderPath, node).catch(() => {
+							new Notice('Failed to save the node position.');
+						});
+					},
+					(node) => {
+						// click も同期。開けなかったときだけ知らせる
+						this.openNote(folder, node.id).catch(() => {
+							new Notice(`Failed to open "${node.id}".`);
+						});
+					},
+				),
+			);
+		}
+
+		new Notice(`Rendered ${nodes.length} notes.`);
+	}
+
+	/**
+	 * フォルダパス（文字列）から renderFolderDiagram を呼ぶ。
+	 *
+	 * ビュー右上の再読み込みボタンは、ワークスペースの状態として保存された
+	 * パス文字列しか持っていない（TFolder はシリアライズできないため）。
+	 * ここでパスから TFolder を解決してから本処理に渡す。
+	 */
+	async renderFolderDiagramByPath(
+		folderPath: string,
+		leaf: WorkspaceLeaf,
+	): Promise<void> {
+		// vault 直下（ボールト全体）が対象の場合、getAbstractFileByPath に
+		// そのパスを渡しても解決できるとは限らないため、ルートは直接扱う
+		const root = this.app.vault.getRoot();
+		const folder =
+			folderPath === root.path
+				? root
+				: this.app.vault.getAbstractFileByPath(folderPath);
+		if (!(folder instanceof TFolder)) {
+			new Notice(`Folder "${folderPath}" no longer exists.`);
+			return;
+		}
+		await this.renderFolderDiagram(folder, leaf);
 	}
 
 	/**
