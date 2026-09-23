@@ -10,7 +10,6 @@ import {
 import {
 	DEFAULT_SETTINGS,
 	BasesRelationDiagramSettings,
-	BasesRelationDiagramSettingTab,
 	FolderPositions,
 } from './settings';
 import { RelationDiagramView, VIEW_TYPE_RELATION_DIAGRAM } from './view';
@@ -660,7 +659,6 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 			},
 		});
 
-		this.addSettingTab(new BasesRelationDiagramSettingTab(this.app, this));
 	}
 
 	/**
