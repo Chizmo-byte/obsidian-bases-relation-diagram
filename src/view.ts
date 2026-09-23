@@ -4,10 +4,30 @@ import {
 	Notice,
 	ViewStateResult,
 	WorkspaceLeaf,
+	getLanguage,
 } from 'obsidian';
 import { fitNodeText } from './node-text';
 
 export const VIEW_TYPE_RELATION_DIAGRAM = 'bases-relation-diagram-view';
+
+/**
+ * まだ図が無いときの案内文。
+ *
+ * main.ts の nodeOpenLabel() と同じ方式（getLanguage() ベースの単純な
+ * 辞書引き）。表示言語ごとの訳で、載っていない言語は
+ * `EMPTY_STATE_LABEL_FALLBACK` に落ちる。
+ */
+const EMPTY_STATE_LABELS: Record<string, string> = {
+	ja: 'まだ図がありません。右上の再読み込みボタンを押すか、コマンドを実行してください。',
+};
+const EMPTY_STATE_LABEL_FALLBACK =
+	'No diagram yet. Click the refresh button above, or run the relation diagram command.';
+
+/** 現在の表示言語に合わせた、まだ図が無いときの案内文。 */
+function emptyStateLabel(): string {
+	// getLanguage() は ISO コードを返し、未設定なら 'en'（要 Obsidian 1.8.7）
+	return EMPTY_STATE_LABELS[getLanguage()] ?? EMPTY_STATE_LABEL_FALLBACK;
+}
 
 /**
  * このビューがワークスペースの状態として保存・復元する内容。
@@ -136,7 +156,7 @@ export class RelationDiagramView extends ItemView {
 		// この時点でも機能する
 		if (!this.svg) {
 			contentEl.createEl('p', {
-				text: 'No diagram yet. Click the refresh button, or run the relation diagram command, to render a folder.',
+				text: emptyStateLabel(),
 			});
 			return;
 		}
