@@ -25,6 +25,16 @@ This is not a full ER-diagram tool with formal cardinality notation — it's a
 lightweight way to see how the notes in one folder relate to each other,
 using data you were probably already writing.
 
+## Use cases
+
+Base Diagram doesn't care what your notes are about — anything you can
+express as "this note relates to that note" works:
+
+- Character relationship maps for fiction writing
+- Project structure: planning notes, research, tasks, and ideas
+- Worldbuilding: locations, factions, and events
+- Lightweight data or system design sketches
+
 ## Why not just use the graph view?
 
 Obsidian's built-in graph view shows your *entire* vault, all the time,
@@ -54,6 +64,8 @@ with no control over layout. Base Diagram is scoped and intentional instead:
    command palette.
 3. Drag boxes around to arrange them. Your layout is remembered.
 4. Click **Open note** on any box to jump straight to it.
+5. After restarting Obsidian, click the refresh button in the view's
+   header to redraw the diagram — no need to rerun the command.
 
 ## Tips for readable diagrams
 
