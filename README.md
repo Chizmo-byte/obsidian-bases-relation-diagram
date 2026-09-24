@@ -95,13 +95,20 @@ value, or no value at all, falls back to the default background.
 
 ## Installation
 
-Not yet in the Community Plugins directory. To install manually:
+### From Community Plugins (recommended)
+
+1. Open **Settings → Community plugins** in Obsidian
+2. If Restricted mode is on, click **Turn on community plugins**
+3. Click **Browse** and search for **Base Diagram**
+4. Click **Install**, then **Enable**
+
+### Manual installation
 
 1. Download `main.js`, `manifest.json`, and `styles.css` from the
-   [latest release](../../releases)
-2. Create a folder `VaultFolder/.obsidian/plugins/bases-relation-diagram/`
+   [latest release](../../releases/latest)
+2. Create a folder `YourVault/.obsidian/plugins/bases-relation-diagram/`
 3. Copy the three files into it
-4. Reload Obsidian and enable **Base Diagram** in Community Plugins
+4. Reload Obsidian and enable **Base Diagram** in Community plugins
 
 ## Known limitations
 
