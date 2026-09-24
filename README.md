@@ -61,7 +61,16 @@ with no control over layout. Base Diagram is scoped and intentional instead:
    status: draft
    ---
    ```
+	> **Tip — adding properties in Live Preview:** In Live Preview (Obsidian's
+	> default mode), typing `---` or `-` by hand is treated as Markdown
+	> (a horizontal rule or a list), so the YAML won't come out right.
+	> Use one of these instead:
+	>
+	> - **Paste** the whole YAML block above at the top of a note — it turns
+	>   into properties automatically
+	> - Or run **Add file property**, then type `[[` in the value to pick a note
 
+ 
 2. With a note in that folder open, run **Open relation diagram** from the
    command palette.
 3. Drag boxes around to arrange them. Your layout is remembered.
