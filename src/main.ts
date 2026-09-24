@@ -135,6 +135,17 @@ const NODE_OPEN_LABELS: Record<string, string> = {
 };
 const NODE_OPEN_LABEL_FALLBACK = 'Open note';
 
+/**
+ * ノートパス文字列から、拡張子なしのファイル名（basename）を取り出す。
+ *
+ * `vault.on('rename', ...)` の oldPath はファイルオブジェクトではなく
+ * 文字列でしか渡らないため、TFile.basename 相当の値を自前で求める。
+ */
+function basenameOf(notePath: string): string {
+	const fileName = notePath.slice(notePath.lastIndexOf('/') + 1);
+	return fileName.replace(/\.md$/, '');
+}
+
 /** 現在の表示言語に合わせた「ページを開く」の文言。 */
 function nodeOpenLabel(): string {
 	// getLanguage() は ISO コードを返し、未設定なら 'en'（要 Obsidian 1.8.7）
@@ -659,6 +670,29 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 			},
 		});
 
+		// リネーム／移動で保存済み座標を見失わないよう、キーをノートに追従させる。
+		// 開いている図は再描画しない（ユーザーが🔄で反映する前提）
+		this.registerEvent(
+			this.app.vault.on('rename', (file, oldPath) => {
+				if (!(file instanceof TFile) || file.extension !== 'md') {
+					return;
+				}
+				this.updateNodePositionOnRename(file, oldPath).catch(() => {
+					new Notice('Failed to update the saved node position.');
+				});
+			}),
+		);
+
+		this.registerEvent(
+			this.app.vault.on('delete', (file) => {
+				if (!(file instanceof TFile) || file.extension !== 'md') {
+					return;
+				}
+				this.removeNodePositionOnDelete(file).catch(() => {
+					new Notice('Failed to remove the saved node position.');
+				});
+			}),
+		);
 	}
 
 	/**
@@ -823,6 +857,67 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 		const folderPositions = this.settings.nodePositions[folderPath] ?? {};
 		folderPositions[node.id] = { x: node.x, y: node.y };
 		this.settings.nodePositions[folderPath] = folderPositions;
+		await this.saveSettings();
+	}
+
+	/**
+	 * ノートの新しいパスから、座標を引くためのフォルダパスを求める。
+	 *
+	 * ルート直下のノートには区切り文字 "/" が無いため、その場合は
+	 * `vault.getRoot().path` に合わせる（renderFolderDiagramByPath が
+	 * フォルダを引くときの基準と一致させるため）。
+	 */
+	private folderPathOf(notePath: string): string {
+		const lastSlash = notePath.lastIndexOf('/');
+		return lastSlash === -1
+			? this.app.vault.getRoot().path
+			: notePath.slice(0, lastSlash);
+	}
+
+	/**
+	 * リネーム／移動されたノートの座標エントリを、新しいキーへ付け替える。
+	 *
+	 * 座標は nodePositions[フォルダパス][ノート名] で保存されているため、
+	 * 同じフォルダ内でのリネームはノート名のキーを、別フォルダへの移動は
+	 * フォルダパスのキーを、それぞれ付け替える必要がある（両方同時に
+	 * 起きる場合もある）。保存済み座標が無いノートは何もしない。
+	 */
+	async updateNodePositionOnRename(
+		file: TFile,
+		oldPath: string,
+	): Promise<void> {
+		const oldFolderPath = this.folderPathOf(oldPath);
+		const oldId = basenameOf(oldPath);
+		const newFolderPath = this.folderPathOf(file.path);
+		const newId = file.basename;
+
+		if (oldFolderPath === newFolderPath && oldId === newId) {
+			return;
+		}
+
+		const oldFolderPositions = this.settings.nodePositions[oldFolderPath];
+		const position = oldFolderPositions?.[oldId];
+		if (!position) {
+			return;
+		}
+		delete oldFolderPositions[oldId];
+
+		const newFolderPositions =
+			this.settings.nodePositions[newFolderPath] ?? {};
+		newFolderPositions[newId] = position;
+		this.settings.nodePositions[newFolderPath] = newFolderPositions;
+
+		await this.saveSettings();
+	}
+
+	/** 削除されたノートの座標エントリを、保存データから取り除く。 */
+	async removeNodePositionOnDelete(file: TFile): Promise<void> {
+		const folderPath = this.folderPathOf(file.path);
+		const folderPositions = this.settings.nodePositions[folderPath];
+		if (!folderPositions || !(file.basename in folderPositions)) {
+			return;
+		}
+		delete folderPositions[file.basename];
 		await this.saveSettings();
 	}
 
