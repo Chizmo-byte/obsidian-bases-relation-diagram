@@ -1,3 +1,5 @@
+[English](README.md) | [日本語](README.ja.md)
+
 # Base Diagram
 
 Turn any folder of notes into a relationship diagram — powered entirely by
