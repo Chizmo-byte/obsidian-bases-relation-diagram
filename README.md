@@ -112,11 +112,21 @@ value, or no value at all, falls back to the default background.
 3. Copy the three files into it
 4. Reload Obsidian and enable **Base Diagram** in Community plugins
 
+## Manual layout by design
+
+Base Diagram intentionally does not run an automatic graph layout.
+Once you place a note, it stays there — positions are saved per folder,
+so a layout you've arranged with meaning (a timeline, a hierarchy,
+groups of related notes) won't be reshuffled as your notes change.
+
+Think of it less as a graph view and more as a relation board you build
+and maintain yourself.
+
 ## Known limitations
 
-- Layout is manual only — there's no automatic graph-layout algorithm, so
-  relationship lines can cross or pass behind boxes on dense diagrams
 - One diagram shows one folder at a time
+- Relationship lines are straight and can cross or pass behind boxes;
+  rearrange boxes to keep dense diagrams readable
 - No formal cardinality notation (1-to-many, etc.) — just directional
   arrows
 
