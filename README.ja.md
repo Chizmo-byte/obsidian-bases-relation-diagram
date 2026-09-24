@@ -1,3 +1,5 @@
+[English](README.md) | [日本語](README.ja.md)
+
 # Base Diagram
 
 フォルダの中のノートを、そのまま関係図として可視化するObsidianプラグインです。
