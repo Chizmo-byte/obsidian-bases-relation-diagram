@@ -74,6 +74,9 @@ with no control over layout. Base Diagram is scoped and intentional instead:
 2. With a note in that folder open, run **Open relation diagram** from the
    command palette.
 3. Drag boxes around to arrange them. Your layout is remembered.
+   New notes that have no saved position are placed in name order (numbers
+   sort numerically) in a new row below your lowest box. Drag a box once to
+   keep it where you put it.
 4. Click **Open note** on any box to jump straight to it.
 5. After restarting Obsidian, click the refresh button in the view's
    header to redraw the diagram — no need to rerun the command.
@@ -138,6 +141,10 @@ and maintain yourself.
   rearrange boxes to keep dense diagrams readable
 - No formal cardinality notation (1-to-many, etc.) — just directional
   arrows
+
+## Feedback
+
+Feedback and bug reports are welcome in [Issues](../../issues).
 
 ## License
 
