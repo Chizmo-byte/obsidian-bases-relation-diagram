@@ -151,6 +151,20 @@ function nodeOpenLabel(): string {
 	// getLanguage() は ISO コードを返し、未設定なら 'en'（要 Obsidian 1.8.7）
 	return NODE_OPEN_LABELS[getLanguage()] ?? NODE_OPEN_LABEL_FALLBACK;
 }
+
+/**
+ * フォルダの右クリックメニューに出す項目名。
+ * 載っていない言語は `FOLDER_MENU_LABEL_FALLBACK` に落ちる。
+ */
+const FOLDER_MENU_LABELS: Record<string, string> = {
+	ja: 'リレーション図を開く',
+};
+const FOLDER_MENU_LABEL_FALLBACK = 'Open relation diagram';
+
+/** 現在の表示言語に合わせた、フォルダ右クリックメニューの項目名。 */
+function folderMenuLabel(): string {
+	return FOLDER_MENU_LABELS[getLanguage()] ?? FOLDER_MENU_LABEL_FALLBACK;
+}
 /**
  * 箱の中のフォントサイズ（px）。
  *
@@ -692,27 +706,34 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 			});
 		});
 
-		// TODO: 動作確認用の一時コマンド。UI を実装する際に削除する。
 		this.addCommand({
 			id: 'open-relation-diagram',
 			name: 'Open relation diagram',
 			callback: async () => {
 				const activeFile = this.app.workspace.getActiveFile();
 				const folder = activeFile?.parent ?? this.app.vault.getRoot();
-
-				const leaf = this.app.workspace.getLeaf('tab');
-				await leaf.setViewState({
-					type: VIEW_TYPE_RELATION_DIAGRAM,
-					active: true,
-					// ビューの setState() に渡り、ワークスペースの状態として
-					// 保存される。再起動後もこのフォルダパスで再読み込みできる
-					state: { folderPath: folder.path },
-				});
-				// setViewState の active: true でタブが前面に来るため revealLeaf は不要
-
-				await this.renderFolderDiagram(folder, leaf);
+				await this.openDiagramForFolder(folder);
 			},
 		});
+
+		// ファイルエクスプローラーでフォルダを右クリックしたときの項目
+		this.registerEvent(
+			this.app.workspace.on('file-menu', (menu, file) => {
+				if (!(file instanceof TFolder)) {
+					return;
+				}
+				menu.addItem((item) => {
+					item
+						.setTitle(folderMenuLabel())
+						.setIcon('git-fork')
+						.onClick(() => {
+							this.openDiagramForFolder(file).catch(() => {
+								new Notice('Failed to open the diagram.');
+							});
+						});
+				});
+			}),
+		);
 
 		// リネーム／移動で保存済み座標を見失わないよう、キーをノートに追従させる。
 		// 開いている図は再描画しない（ユーザーが🔄で反映する前提）
@@ -737,6 +758,25 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 				});
 			}),
 		);
+	}
+
+	/**
+	 * 指定フォルダの図を新しいタブで開く。
+	 *
+	 * コマンドと、フォルダの右クリックメニューの両方から呼ばれる。
+	 */
+	async openDiagramForFolder(folder: TFolder): Promise<void> {
+		const leaf = this.app.workspace.getLeaf('tab');
+		await leaf.setViewState({
+			type: VIEW_TYPE_RELATION_DIAGRAM,
+			active: true,
+			// ビューの setState() に渡り、ワークスペースの状態として
+			// 保存される。再起動後もこのフォルダパスで再読み込みできる
+			state: { folderPath: folder.path },
+		});
+		// setViewState の active: true でタブが前面に来るため revealLeaf は不要
+
+		await this.renderFolderDiagram(folder, leaf);
 	}
 
 	/**
