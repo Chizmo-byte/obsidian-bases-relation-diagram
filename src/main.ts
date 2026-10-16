@@ -185,7 +185,7 @@ export function nodeHeight(node: DiagramNode): number {
  * `collectFolderRelations()` の結果を描画用のノード配列に変換する。
  *
  * 座標は割り当てない（0 のまま）。配置はレイアウト関数の責務とし、
- * 呼び出し側で `layoutGrid(toDiagramNodes(...))` のように合成する。
+ * 呼び出し側で `layoutWithSaved(toDiagramNodes(...), saved)` のように合成する。
  */
 export function toDiagramNodes(notes: NoteRelations[]): DiagramNode[] {
 	return notes.map((note) => ({
@@ -206,18 +206,20 @@ export function toDiagramNodes(notes: NoteRelations[]): DiagramNode[] {
  * 入力を書き換えず、座標を入れ直した新しい配列を返す。レイアウトアルゴリズムを
  * 差し替えるときは、このシグネチャを保ったまま別の関数に置き換えればよい。
  */
-export function layoutGrid(nodes: DiagramNode[]): DiagramNode[] {
+export function layoutGrid(
+	nodes: DiagramNode[],
+	originY = 40,
+): DiagramNode[] {
 	const NODES_PER_ROW = 4;
 	// ノード同士が接しないよう、矩形の寸法に余白を足した間隔にする
 	const SPACING_X = NODE_WIDTH + 40;
 	const ROW_GAP = 60;
 	const ORIGIN_X = 40;
-	const ORIGIN_Y = 40;
 
 	// 箱の高さが可変なので、行送りは固定値にできない。
 	// 各行で一番高いノードを基準に、次の行の上端を決めていく
 	const rowTops: number[] = [];
-	let rowTop = ORIGIN_Y;
+	let rowTop = originY;
 	for (let start = 0; start < nodes.length; start += NODES_PER_ROW) {
 		rowTops.push(rowTop);
 		const rowNodes = nodes.slice(start, start + NODES_PER_ROW);
@@ -227,8 +229,50 @@ export function layoutGrid(nodes: DiagramNode[]): DiagramNode[] {
 	return nodes.map((node, index) => ({
 		...node,
 		x: ORIGIN_X + (index % NODES_PER_ROW) * SPACING_X,
-		y: rowTops[Math.floor(index / NODES_PER_ROW)] ?? ORIGIN_Y,
+		y: rowTops[Math.floor(index / NODES_PER_ROW)] ?? originY,
 	}));
+}
+
+/**
+ * 保存済みの座標を反映しつつ、未配置のノートの初期位置を決める。
+ *
+ * - 未配置のノートは名前の自然順（数字は数値順。"2" が "10" より前）に並べる
+ * - 保存済みのノートが 1 つもなければ、全ノートを先頭からグリッドに並べる
+ * - 保存済みのノートがあれば、その一番下の箱の下から未配置分を並べ、
+ *   既存の箱と重ならないようにする
+ *
+ * 保存済みの座標は一切書き換えない。入力も書き換えず新しい配列を返す。
+ * 返す順序は入力と同じ。
+ */
+export function layoutWithSaved(
+	nodes: DiagramNode[],
+	saved: FolderPositions,
+): DiagramNode[] {
+	const ROW_GAP = 60;
+	const ORIGIN_Y = 40;
+
+	const placed = applySavedPositions(
+		nodes.filter((node) => saved[node.id]),
+		saved,
+	);
+	const unplaced = nodes
+		.filter((node) => !saved[node.id])
+		.sort((a, b) =>
+			a.id.localeCompare(b.id, undefined, { numeric: true }),
+		);
+
+	const originY =
+		placed.length === 0
+			? ORIGIN_Y
+			: Math.max(...placed.map((n) => n.y + nodeHeight(n))) + ROW_GAP;
+	const laidOut = new Map(
+		layoutGrid(unplaced, originY).map((node) => [node.id, node]),
+	);
+	const placedById = new Map(placed.map((node) => [node.id, node]));
+
+	return nodes.map(
+		(node) => placedById.get(node.id) ?? laidOut.get(node.id) ?? node,
+	);
 }
 
 /**
@@ -710,9 +754,9 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 	): Promise<void> {
 		const folderPath = folder.path;
 		const notes = this.collectFolderRelations(folder);
-		// まず layoutGrid で全ノードに既定位置を与え、保存済みのものだけ上書きする
-		const nodes = applySavedPositions(
-			layoutGrid(toDiagramNodes(notes)),
+		// 保存済みの座標はそのまま使い、未配置のノートだけ既存の箱の下に並べる
+		const nodes = layoutWithSaved(
+			toDiagramNodes(notes),
 			this.settings.nodePositions[folderPath] ?? {},
 		);
 
