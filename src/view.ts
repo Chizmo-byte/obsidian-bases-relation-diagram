@@ -38,6 +38,20 @@ interface RelationDiagramViewState {
 	folderPath?: string;
 }
 
+/**
+ * タブに表示する名前。ノートのタブと見分けがつくよう、フォルダ名の先頭に
+ * `/` を付ける（例: `/Base Diagram`）。階層が深くても最後の名前だけを使う。
+ * まだフォルダが決まっていないときは従来の名前に落とす。
+ */
+function diagramTabTitle(folderPath: string | null): string {
+	if (folderPath === null) {
+		return 'Relation diagram';
+	}
+	const segments = folderPath.split('/').filter((s) => s !== '');
+	// vault 直下（パスが空文字列または '/'）は区切りだけにする
+	return '/' + (segments[segments.length - 1] ?? '');
+}
+
 /** setState() には型不明の値が来るので、使う前に形を確認する。 */
 function isRelationDiagramViewState(
 	value: unknown,
@@ -79,7 +93,7 @@ export class RelationDiagramView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return 'Relation diagram';
+		return diagramTabTitle(this.folderPath);
 	}
 
 	getIcon(): IconName {

@@ -165,6 +165,21 @@ const FOLDER_MENU_LABEL_FALLBACK = 'Open relation diagram';
 function folderMenuLabel(): string {
 	return FOLDER_MENU_LABELS[getLanguage()] ?? FOLDER_MENU_LABEL_FALLBACK;
 }
+
+/**
+ * コマンドを実行したとき、開いているノートが無い場合の通知。
+ * コマンドは「開いているノートのフォルダ」を対象にするので、対象が決められない。
+ */
+const NO_ACTIVE_NOTE_LABELS: Record<string, string> = {
+	ja: 'ノートを開くか、フォルダを右クリックして図を開いてください。',
+};
+const NO_ACTIVE_NOTE_LABEL_FALLBACK =
+	'Open a note, or right-click a folder to open its diagram.';
+
+/** 現在の表示言語に合わせた、開いているノートが無いときの通知。 */
+function noActiveNoteLabel(): string {
+	return NO_ACTIVE_NOTE_LABELS[getLanguage()] ?? NO_ACTIVE_NOTE_LABEL_FALLBACK;
+}
 /**
  * 箱の中のフォントサイズ（px）。
  *
@@ -711,7 +726,12 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 			name: 'Open relation diagram',
 			callback: async () => {
 				const activeFile = this.app.workspace.getActiveFile();
-				const folder = activeFile?.parent ?? this.app.vault.getRoot();
+				if (!activeFile) {
+					// 対象フォルダを決められないまま Vault 全体の空の図を開かない
+					new Notice(noActiveNoteLabel());
+					return;
+				}
+				const folder = activeFile.parent ?? this.app.vault.getRoot();
 				await this.openDiagramForFolder(folder);
 			},
 		});
