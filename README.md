@@ -22,6 +22,8 @@ Point Base Diagram at a folder, and it will:
 - Let you drag boxes into whatever layout makes sense to you — positions are
   saved per folder, so they're still there next time you open the diagram
 - Let a note open in a new tab with one click, right from its box
+- Show subfolders as folder-shaped boxes you can step into, with a
+  breadcrumb to step back out
 
 This is not a full ER-diagram tool with formal cardinality notation — it's a
 lightweight way to see how the notes in one folder relate to each other,
@@ -71,8 +73,12 @@ with no control over layout. Base Diagram is scoped and intentional instead:
 	> - Or run **Add file property**, then type `[[` in the value to pick a note
 
  
-2. With a note in that folder open, run **Open relation diagram** from the
-   command palette.
+2. Open the diagram in either of two ways:
+   - **Command:** with a note in that folder open, run **Open relation
+     diagram** from the command palette. It opens the folder of the note
+     you're currently viewing.
+   - **Right-click:** right-click a folder in the file explorer and choose
+     **Open relation diagram**. It opens the folder you clicked.
 3. Drag boxes around to arrange them. Your layout is remembered.
    New notes that have no saved position are placed in name order (numbers
    sort numerically) in a new row below your lowest box. Drag a box once to
@@ -80,6 +86,19 @@ with no control over layout. Base Diagram is scoped and intentional instead:
 4. Click **Open note** on any box to jump straight to it.
 5. After restarting Obsidian, click the refresh button in the view's
    header to redraw the diagram — no need to rerun the command.
+
+## Subfolders
+
+Subfolders of the folder you're viewing appear as folder-shaped boxes with
+the number of notes inside. Like note boxes, you can drag them and their
+positions are saved.
+
+- Click **Open folder** on a folder box to step into it in the same tab.
+  Hold **Ctrl** (**Cmd** on Mac) while clicking to open it in a new tab.
+- The breadcrumb above the diagram (e.g. `/ > Projects > Ideas`) shows where
+  you are. Click any level except the last to go back up.
+- Links between notes in different folders aren't drawn — each diagram shows
+  one folder's notes only.
 
 ## Tips for readable diagrams
 
