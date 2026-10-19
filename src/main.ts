@@ -98,6 +98,16 @@ export interface DiagramNode {
 	properties: NoteProperty[];
 	/** 箱の背景色。未指定なら既定色のまま描画する。 */
 	color?: NodeColor;
+	/**
+	 * サブフォルダの箱のときだけ入る、そのフォルダのパス。
+	 * 入っていればノートではなくフォルダの箱として描き、開くとその中の図へ入る。
+	 */
+	folderPath?: string;
+	/**
+	 * サブフォルダの箱だけが持つ、1 行の説明（例: "Notes: 3"）。
+	 * プロパティの 2 行表示（名前と値）より低く収めるため、別枠で 1 行だけ描く。
+	 */
+	summary?: string;
 }
 
 /** ノード矩形の寸法。レイアウトと描画の両方が参照する。 */
@@ -152,6 +162,18 @@ function nodeOpenLabel(): string {
 	return NODE_OPEN_LABELS[getLanguage()] ?? NODE_OPEN_LABEL_FALLBACK;
 }
 
+/** サブフォルダの箱の最下部に置く行の文言。 */
+const FOLDER_OPEN_LABELS: Record<string, string> = {
+	ja: 'フォルダを開く',
+};
+const FOLDER_OPEN_LABEL_FALLBACK = 'Open folder';
+
+/** サブフォルダの箱の中に出す、ノート数の見出し。 */
+const FOLDER_NOTES_LABELS: Record<string, string> = {
+	ja: 'ノート',
+};
+const FOLDER_NOTES_LABEL_FALLBACK = 'Notes';
+
 /**
  * フォルダの右クリックメニューに出す項目名。
  * 載っていない言語は `FOLDER_MENU_LABEL_FALLBACK` に落ちる。
@@ -160,6 +182,16 @@ const FOLDER_MENU_LABELS: Record<string, string> = {
 	ja: 'リレーション図を開く',
 };
 const FOLDER_MENU_LABEL_FALLBACK = 'Open relation diagram';
+
+/** 現在の表示言語に合わせた、サブフォルダの箱の最下部の文言。 */
+function folderOpenLabel(): string {
+	return FOLDER_OPEN_LABELS[getLanguage()] ?? FOLDER_OPEN_LABEL_FALLBACK;
+}
+
+/** 現在の表示言語に合わせた、サブフォルダの箱のノート数の見出し。 */
+function folderNotesLabel(): string {
+	return FOLDER_NOTES_LABELS[getLanguage()] ?? FOLDER_NOTES_LABEL_FALLBACK;
+}
 
 /** 現在の表示言語に合わせた、フォルダ右クリックメニューの項目名。 */
 function folderMenuLabel(): string {
@@ -206,6 +238,7 @@ export function nodeHeight(node: DiagramNode): number {
 	return (
 		NODE_HEADER_HEIGHT +
 		node.properties.length * NODE_PROPERTY_LINES * NODE_ROW_HEIGHT +
+		(node.summary === undefined ? 0 : NODE_ROW_HEIGHT) +
 		NODE_ROW_HEIGHT
 	);
 }
@@ -227,6 +260,73 @@ export function toDiagramNodes(notes: NoteRelations[]): DiagramNode[] {
 		properties: [...note.properties],
 		color: note.color,
 	}));
+}
+
+/** フォルダの箱の上にはみ出す「耳」の寸法。 */
+const FOLDER_TAB_WIDTH = 44;
+const FOLDER_TAB_HEIGHT = 10;
+
+/**
+ * フォルダの箱の輪郭。左上に耳が付いたフォルダの形を、1 本のパスで描く。
+ *
+ * 耳は箱の上（y が負の側）にはみ出す。箱の本体は他のノードと同じ
+ * (0, 0)〜(width, height) で、線の接続位置や高さの計算は変わらない。
+ */
+function folderOutlinePath(width: number, height: number): string {
+	const r = 6;
+	const t = FOLDER_TAB_HEIGHT;
+	const w = FOLDER_TAB_WIDTH;
+	return [
+		`M 0 ${-t + r}`,
+		`Q 0 ${-t} ${r} ${-t}`,
+		`H ${w}`,
+		`L ${w + t} 0`,
+		`H ${width - r}`,
+		`Q ${width} 0 ${width} ${r}`,
+		`V ${height - r}`,
+		`Q ${width} ${height} ${width - r} ${height}`,
+		`H ${r}`,
+		`Q 0 ${height} 0 ${height - r}`,
+		'Z',
+	].join(' ');
+}
+
+/**
+ * サブフォルダの保存キー（座標表での名前）。
+ *
+ * ノート名にはスラッシュを使えないので、先頭に "/" を付ければ
+ * 同じフォルダ内のノート名と必ず区別できる。
+ */
+export function folderNodeId(folderName: string): string {
+	return '/' + folderName;
+}
+
+/**
+ * サブフォルダを、描画用のフォルダの箱に変換する。
+ *
+ * 箱の中身はフォルダ名とノート数だけ（直下の Markdown ノートの数。
+ * さらに下の階層は数えない）。座標は割り当てず、配置は
+ * `layoutWithSaved()` に任せる。
+ */
+export function toFolderNodes(
+	folders: TFolder[],
+	notesLabel: string,
+): DiagramNode[] {
+	return folders.map((folder) => {
+		const noteCount = folder.children.filter(
+			(child) => child instanceof TFile && child.extension === 'md',
+		).length;
+		return {
+			id: folderNodeId(folder.name),
+			label: '/' + folder.name,
+			x: 0,
+			y: 0,
+			relations: [],
+			properties: [],
+			summary: `${notesLabel}: ${noteCount}`,
+			folderPath: folder.path,
+		};
+	});
 }
 
 /**
@@ -352,11 +452,16 @@ const SOURCE_DOT_RADIUS = 3;
  * @param onNodeMoved ドラッグ確定時に呼ばれる。座標の永続化はここで行う
  * @param onNodeOpen 「ページを開く」クリック時に呼ばれる。ノートを開くのは
  *                   ワークスペース側の責務なので、ここでは呼び出しだけ行う
+ * @param onFolderOpen フォルダの箱の最下部の行をクリックしたときに呼ばれる。
+ *                     中の図へ入るのは
+ *                     ワークスペース側の責務。Ctrl（Mac は Cmd）を押して開いた
+ *                     ときは inNewTab が true になる
  */
 export function renderDiagramSvg(
 	nodes: DiagramNode[],
 	onNodeMoved?: (node: DiagramNode) => void,
 	onNodeOpen?: (node: DiagramNode) => void,
+	onFolderOpen?: (node: DiagramNode, inNewTab: boolean) => void,
 ): SVGSVGElement {
 	const MARGIN = 40;
 	// 初期配置ぴったりの viewBox だとノードを動かす余地がないため、
@@ -381,6 +486,9 @@ export function renderDiagramSvg(
 	// 座標はノード矩形の左上基準なので、右端・下端からは寸法分を引く。
 	// 高さはノードごとに違うため、Y の上限は各ノードの高さから都度求める
 	const MAX_NODE_X = Math.max(0, width - NODE_WIDTH);
+	// 耳が上にはみ出すので、フォルダの箱は耳の高さ分だけ下で止める
+	const minNodeY = (node: DiagramNode) =>
+		node.folderPath === undefined ? 0 : FOLDER_TAB_HEIGHT;
 	const maxNodeY = (node: DiagramNode) =>
 		Math.max(0, height - nodeHeight(node));
 
@@ -528,7 +636,11 @@ export function renderDiagramSvg(
 			const point = toSvgPoint(evt);
 			// 描画と線の更新は、必ずクランプ後の座標に対して行う
 			node.x = clamp(point.x - grabOffsetX, 0, MAX_NODE_X);
-			node.y = clamp(point.y - grabOffsetY, 0, maxNodeY(node));
+			node.y = clamp(
+				point.y - grabOffsetY,
+				minNodeY(node),
+				maxNodeY(node),
+			);
 			group.setAttribute('transform', `translate(${node.x}, ${node.y})`);
 			updateConnectedEdges(node);
 		});
@@ -569,7 +681,8 @@ export function renderDiagramSvg(
 				'dominant-baseline': 'middle',
 			},
 		});
-		open.textContent = nodeOpenLabel();
+		open.textContent =
+			node.folderPath === undefined ? nodeOpenLabel() : folderOpenLabel();
 
 		// ドラッグ判定は箱全体（group）の pointerdown に乗っているので、
 		// この行では伝播を止めて掴ませない。こうすると「箱を動かす」と
@@ -579,7 +692,11 @@ export function renderDiagramSvg(
 		});
 		open.addEventListener('click', (evt) => {
 			evt.stopPropagation();
-			onNodeOpen?.(node);
+			if (node.folderPath === undefined) {
+				onNodeOpen?.(node);
+			} else {
+				onFolderOpen?.(node, evt.ctrlKey || evt.metaKey);
+			}
 		});
 	};
 
@@ -591,26 +708,37 @@ export function renderDiagramSvg(
 			// undefined になっている。box だけでなくここにも付けておくと、
 			// プロパティ名の文字色など、色付きノードに限った CSS の出し分けが
 			// 子要素側（box とは別要素）からでも書ける
-			cls: node.color
-				? ['relation-diagram-node', `is-color-${node.color}`]
-				: 'relation-diagram-node',
+			cls: [
+				'relation-diagram-node',
+				...(node.color ? [`is-color-${node.color}`] : []),
+				...(node.folderPath === undefined ? [] : ['is-folder']),
+			],
 			attr: { transform: `translate(${node.x}, ${node.y})` },
 		});
 
-		group.createSvg('rect', {
+		const boxClass = node.color
+			? ['relation-diagram-node-box', `is-color-${node.color}`]
+			: 'relation-diagram-node-box';
+		if (node.folderPath === undefined) {
 			// color が未指定、または既定 5 色以外の値なら isNodeColor で弾かれて
 			// undefined になっている。その場合は修飾クラスを付けず既定色のまま
-			cls: node.color
-				? ['relation-diagram-node-box', `is-color-${node.color}`]
-				: 'relation-diagram-node-box',
-			attr: {
-				x: 0,
-				y: 0,
-				width: NODE_WIDTH,
-				height: nodeHeight(node),
-				rx: 6,
-			},
-		});
+			group.createSvg('rect', {
+				cls: boxClass,
+				attr: {
+					x: 0,
+					y: 0,
+					width: NODE_WIDTH,
+					height: nodeHeight(node),
+					rx: 6,
+				},
+			});
+		} else {
+			// フォルダの箱は、耳付きの輪郭を 1 本のパスで描く
+			group.createSvg('path', {
+				cls: boxClass,
+				attr: { d: folderOutlinePath(NODE_WIDTH, nodeHeight(node)) },
+			});
+		}
 
 		const label = group.createSvg('text', {
 			cls: 'relation-diagram-node-label',
@@ -641,6 +769,36 @@ export function renderDiagramSvg(
 					y2: NODE_HEADER_HEIGHT,
 				},
 			});
+		}
+
+		if (node.summary !== undefined) {
+			// フォルダの箱: 見出しの下に 1 行だけ置く
+			group.createSvg('line', {
+				cls: 'relation-diagram-node-divider',
+				attr: {
+					x1: 0,
+					y1: NODE_HEADER_HEIGHT,
+					x2: NODE_WIDTH,
+					y2: NODE_HEADER_HEIGHT,
+				},
+			});
+			const summary = group.createSvg('text', {
+				cls: [
+					'relation-diagram-node-property',
+					'relation-diagram-node-property-value',
+				],
+				attr: {
+					x: NODE_PADDING_X,
+					y: NODE_HEADER_HEIGHT + NODE_ROW_HEIGHT / 2,
+					'dominant-baseline': 'middle',
+				},
+			});
+			setFittableText(
+				summary,
+				node.summary,
+				NODE_TEXT_WIDTH,
+				NODE_PROPERTY_FONT_SIZE,
+			);
 		}
 
 		node.properties.forEach((property, index) => {
@@ -759,6 +917,12 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 		// 開いている図は再描画しない（ユーザーが🔄で反映する前提）
 		this.registerEvent(
 			this.app.vault.on('rename', (file, oldPath) => {
+				if (file instanceof TFolder) {
+					this.updateFolderBoxOnRename(file, oldPath).catch(() => {
+						new Notice('Failed to update the saved node position.');
+					});
+					return;
+				}
 				if (!(file instanceof TFile) || file.extension !== 'md') {
 					return;
 				}
@@ -770,6 +934,12 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 
 		this.registerEvent(
 			this.app.vault.on('delete', (file) => {
+				if (file instanceof TFolder) {
+					this.removeFolderBoxOnDelete(file).catch(() => {
+						new Notice('Failed to remove the saved node position.');
+					});
+					return;
+				}
 				if (!(file instanceof TFile) || file.extension !== 'md') {
 					return;
 				}
@@ -814,9 +984,16 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 	): Promise<void> {
 		const folderPath = folder.path;
 		const notes = this.collectFolderRelations(folder);
-		// 保存済みの座標はそのまま使い、未配置のノートだけ既存の箱の下に並べる
+		const subfolders = folder.children.filter(
+			(child): child is TFolder => child instanceof TFolder,
+		);
+		// 保存済みの座標はそのまま使い、未配置のものだけ既存の箱の下に並べる。
+		// サブフォルダの箱は、ノートの箱と同じ仕組みで置く
 		const nodes = layoutWithSaved(
-			toDiagramNodes(notes),
+			[
+				...toFolderNodes(subfolders, folderNotesLabel()),
+				...toDiagramNodes(notes),
+			],
 			this.settings.nodePositions[folderPath] ?? {},
 		);
 
@@ -837,11 +1014,39 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 							new Notice(`Failed to open "${node.id}".`);
 						});
 					},
+					(node, inNewTab) => {
+						if (node.folderPath === undefined) {
+							return;
+						}
+						if (inNewTab) {
+							// Ctrl / Cmd を押していたときは、新しいタブで開く
+							const target = this.app.vault.getAbstractFileByPath(
+								node.folderPath,
+							);
+							if (target instanceof TFolder) {
+								this.openDiagramForFolder(target).catch(() => {
+									new Notice('Failed to open the folder.');
+								});
+							}
+							return;
+						}
+						// 既定は同じタブのまま、サブフォルダの図へ入る。
+						// 描画はビューの setState が引き受ける
+						leaf
+							.setViewState({
+								type: VIEW_TYPE_RELATION_DIAGRAM,
+								active: true,
+								state: { folderPath: node.folderPath },
+							})
+							.catch(() => {
+								new Notice('Failed to open the folder.');
+							});
+					},
 				),
 			);
 		}
 
-		new Notice(`Rendered ${nodes.length} notes.`);
+		new Notice(`Rendered ${notes.length} notes.`);
 	}
 
 	/**
@@ -1011,6 +1216,47 @@ export default class BasesRelationDiagramPlugin extends Plugin {
 		newFolderPositions[newId] = position;
 		this.settings.nodePositions[newFolderPath] = newFolderPositions;
 
+		await this.saveSettings();
+	}
+
+	/**
+	 * リネーム／移動されたサブフォルダの箱の座標を、新しいキーへ付け替える。
+	 *
+	 * 箱の座標は親フォルダの表に "/フォルダ名" のキーで入っている。
+	 * 中のノートの座標はノート側の rename イベントで追従する。
+	 */
+	async updateFolderBoxOnRename(
+		folder: TFolder,
+		oldPath: string,
+	): Promise<void> {
+		const oldParent = this.folderPathOf(oldPath);
+		const oldId = folderNodeId(oldPath.slice(oldPath.lastIndexOf('/') + 1));
+		const newParent = this.folderPathOf(folder.path);
+		const newId = folderNodeId(folder.name);
+		if (oldParent === newParent && oldId === newId) {
+			return;
+		}
+		const oldPositions = this.settings.nodePositions[oldParent];
+		const position = oldPositions?.[oldId];
+		if (!oldPositions || !position) {
+			return;
+		}
+		delete oldPositions[oldId];
+		const target = this.settings.nodePositions[newParent] ?? {};
+		target[newId] = position;
+		this.settings.nodePositions[newParent] = target;
+		await this.saveSettings();
+	}
+
+	/** 削除されたサブフォルダの箱の座標を、保存データから取り除く。 */
+	async removeFolderBoxOnDelete(folder: TFolder): Promise<void> {
+		const positions =
+			this.settings.nodePositions[this.folderPathOf(folder.path)];
+		const id = folderNodeId(folder.name);
+		if (!positions || !(id in positions)) {
+			return;
+		}
+		delete positions[id];
 		await this.saveSettings();
 	}
 
