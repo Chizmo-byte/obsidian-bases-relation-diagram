@@ -1,6 +1,6 @@
 {
 	"name": "bases-relation-diagram",
-	"version": "0.1.1",
+	"version": "0.2.0",
 	"description": "Extends the Bases Relation and Lookup properties into a visual diagram view, laying out notes as table-style nodes connected by relationship lines.",
 	"main": "main.js",
 	"type": "module",
