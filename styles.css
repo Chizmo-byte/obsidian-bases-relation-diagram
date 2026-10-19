@@ -156,3 +156,38 @@ If your plugin does not need CSS, delete this file.
 .relation-diagram-source-dot {
 	fill: var(--text-muted);
 }
+
+/* サブフォルダの箱。耳付きの形に加え、枠を少し濃くして区別する */
+.relation-diagram-node.is-folder .relation-diagram-node-box {
+	stroke: var(--text-faint);
+}
+
+/* 図の上のパンくず（/ > 親 > 子） */
+.relation-diagram-breadcrumb {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--size-4-1);
+	margin-bottom: var(--size-4-2);
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+
+.relation-diagram-breadcrumb-item:not(.is-current) {
+	cursor: pointer;
+	color: var(--text-accent);
+	/* クリックできると分かるよう、常に下線を付ける */
+	text-decoration: underline;
+}
+
+.relation-diagram-breadcrumb-item:not(.is-current):hover {
+	color: var(--text-accent-hover);
+}
+
+.relation-diagram-breadcrumb-separator {
+	padding: 0 var(--size-4-1);
+}
+
+.relation-diagram-breadcrumb-item.is-current {
+	color: var(--text-normal);
+}

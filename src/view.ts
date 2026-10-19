@@ -128,6 +128,7 @@ export class RelationDiagramView extends ItemView {
 	async setState(state: unknown, result: ViewStateResult): Promise<void> {
 		// vault 直下（ボールト全体）を対象にした場合、folderPath は空文字列
 		// になる。truthy チェックだと弾かれてしまうので undefined と区別する
+		const previousPath = this.folderPath;
 		if (
 			isRelationDiagramViewState(state) &&
 			state.folderPath !== undefined
@@ -135,6 +136,17 @@ export class RelationDiagramView extends ItemView {
 			this.folderPath = state.folderPath;
 		}
 		await super.setState(state, result);
+		// すでに別のフォルダを表示していたビューで、フォルダだけが切り替わった
+		// （サブフォルダへ入る／パンくずで戻る／履歴の戻る進む）ときは、
+		// その場で新しいフォルダの図に描き直す。最初のフォルダ設定
+		// （コマンド実行・再起動後の復元）は描画を呼び出し側に任せる
+		if (
+			previousPath !== null &&
+			this.folderPath !== null &&
+			previousPath !== this.folderPath
+		) {
+			this.renderFolder(this.folderPath);
+		}
 	}
 
 	protected override async onOpen(): Promise<void> {
@@ -160,10 +172,60 @@ export class RelationDiagramView extends ItemView {
 		this.svg = null;
 	}
 
+	/**
+	 * 図の上に、今いる階層を `/ > 親 > 子` の形で出す。
+	 * 現在の階層以外をクリックすると、同じタブでその階層の図に切り替わる。
+	 */
+	private drawBreadcrumb(parent: HTMLElement) {
+		if (this.folderPath === null) {
+			return;
+		}
+		const names = this.folderPath.split('/').filter((s) => s !== '');
+		// vault 直下を表すパスは Obsidian のルートに合わせて '/'
+		const crumbs = [{ label: '/', path: '/' }];
+		names.forEach((name, index) => {
+			crumbs.push({
+				label: name,
+				path: names.slice(0, index + 1).join('/'),
+			});
+		});
+
+		const nav = parent.createDiv({ cls: 'relation-diagram-breadcrumb' });
+		crumbs.forEach((crumb, index) => {
+			if (index > 0) {
+				nav.createSpan({
+					cls: 'relation-diagram-breadcrumb-separator',
+					text: '>',
+				});
+			}
+			const isCurrent = index === crumbs.length - 1;
+			const item = nav.createSpan({
+				cls: isCurrent
+					? ['relation-diagram-breadcrumb-item', 'is-current']
+					: 'relation-diagram-breadcrumb-item',
+				text: crumb.label,
+			});
+			if (!isCurrent) {
+				item.addEventListener('click', () => {
+					this.leaf
+						.setViewState({
+							type: VIEW_TYPE_RELATION_DIAGRAM,
+							active: true,
+							state: { folderPath: crumb.path },
+						})
+						.catch(() => {
+							new Notice('Failed to open the folder.');
+						});
+				});
+			}
+		});
+	}
+
 	private draw() {
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.addClass('relation-diagram-view');
+		this.drawBreadcrumb(contentEl);
 
 		// ワークスペース復元直後は描画対象が無い状態でビューだけが開く。
 		// フォルダパス自体は setState() で復元済みなので、再読み込みボタンは
